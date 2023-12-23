@@ -12,4 +12,5 @@ pdLDS/utils.py
 pdLDS.egg-info/PKG-INFO
 pdLDS.egg-info/SOURCES.txt
 pdLDS.egg-info/dependency_links.txt
+pdLDS.egg-info/requires.txt
 pdLDS.egg-info/top_level.txt

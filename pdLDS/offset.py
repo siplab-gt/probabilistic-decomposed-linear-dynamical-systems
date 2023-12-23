@@ -3,24 +3,6 @@ from math import floor
 import torch
 import numpy as np
 
-# from botorch.models import SingleTaskGP
-# from botorch.fit import fit_gpytorch_mll, fit_gpytorch_mll_torch
-# from gpytorch.mlls import ExactMarginalLogLikelihood
-# from botorch.acquisition import UpperConfidenceBound, ExpectedImprovement
-# from botorch.optim.optimize import optimize_acqf
-
-from skopt import gp_minimize
-
-    
-    
-        
-from skopt import gp_minimize
-from scipy.spatial import cKDTree
-from math import floor
-import torch
-import numpy as np
-
-
 import warnings
 
 def tricube_weight(d):
@@ -150,17 +132,17 @@ class LoessInference:
         
     
 
-    def estimate_smoothing_sk(self,  n_calls=21, n_initial_points=5):
+    # def estimate_smoothing_sk(self,  n_calls=21, n_initial_points=5):
         
-        res = gp_minimize(self.skknee,                  # the function to minimize
-                  [self.s_bounds],      # the bounds on each dimension of x
-                  acq_func="EI",      # the acquisition function
-                  n_calls=n_calls,         # the number of evaluations of f
-                  n_random_starts=n_initial_points,  # the number of random initialization points
-                  model_queue_size=1, 
-                x0 =self.bestx)   # the random seed
+    #     res = gp_minimize(self.skknee,                  # the function to minimize
+    #               [self.s_bounds],      # the bounds on each dimension of x
+    #               acq_func="EI",      # the acquisition function
+    #               n_calls=n_calls,         # the number of evaluations of f
+    #               n_random_starts=n_initial_points,  # the number of random initialization points
+    #               model_queue_size=1, 
+    #             x0 =self.bestx)   # the random seed
     
-        return res
+    #     return res
     
     
     

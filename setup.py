@@ -7,7 +7,7 @@ here = os.path.abspath(os.path.dirname(__file__))
 with codecs.open(os.path.join(here, "README.md"), encoding="utf-8") as fh:
     long_description = "\n" + fh.read()
 
-VERSION = '0.3'
+VERSION = '0.10'
 DESCRIPTION = 'Probabilistic Decomposed Linear Dynamical Systems'
 LONG_DESCRIPTION = 'A package that allows to build simple streams of video, audio and camera data.'
 
@@ -21,7 +21,7 @@ setup(
     long_description_content_type="text/markdown",
     long_description=LONG_DESCRIPTION,
     packages=find_packages(),
-    install_requires=['tqdm', 'numpy', 'numba', "torch"],
+    install_requires=['tqdm', 'numpy', 'numba', "torch", "scipy"],
     keywords=['python', 'dynamical systems',],
     classifiers=[
         # "Development Status :: 1 - Planning",

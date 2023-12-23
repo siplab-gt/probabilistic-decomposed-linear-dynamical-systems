@@ -1,7 +1,7 @@
 # generate data - Lorenz
 import numpy as np
-from scipy.integrate import solve_ivp
 import numpy.random as npr
+from scipy.integrate import solve_ivp
 
 from scipy.linalg import expm
 import torch

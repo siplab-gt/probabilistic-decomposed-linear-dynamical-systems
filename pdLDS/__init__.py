@@ -1,3 +1,3 @@
 from . import offset, dynamics, cDynamics, likelihood, utils, generate
 
-from pdLDS import pdLDS
+from .pdLDS import pdLDS
