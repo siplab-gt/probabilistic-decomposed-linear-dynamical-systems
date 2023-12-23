@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 
 def SBLDFInference(x_sample, xdot, G, xi = 10, max_iter = 1000, tol = 10e-5, ab_init = 1):
     
@@ -175,7 +176,7 @@ def solve_segmented_restricted_lstsq(basis, y, dynamics, x):
     c_infer *= basis
     return c_infer
 
-def sparseSmoother4(c_filt, sigmas, basis):
+def sparseSmoother(c_filt, sigmas, basis):
     sigmas = torch.diagonal(sigmas, dim1=1, dim2=2)
     ix = torch.where(sigmas.sum(1) == 0)[0]
     sigmas[ix] = torch.ones_like(sigmas[ix])*1e-8
@@ -196,26 +197,17 @@ def sparseSmoother4(c_filt, sigmas, basis):
 
         s_t1 = basis[t]
         s_t0 = basis[t-1]
-    #     s_t0 = basis[t-1]
 
 
         sig_t1 = s_smooth[t]
         sig_t0 = sigmas[t-1] + 1
 
-        
-    #     + torch.ones_like(sigmas[t-1])*s_t1.float()*sigmas[basis].mean()*0.0001
-    #     sig_t0 = sigmas[t-1]
-    #     + torch.ones_like(sigmas[t-1])*s_t0.float()*sigmas[basis].mean()*0.0001
-    #     s_t1 = c_t1.abs() > 1e-5
-    #     s_t0 = c_t0.abs() > 1e-5
-    #         print(t, c_t0, c_t1, s_t1)
         s_smooth[t-1] = s_t1.float()*sig_t1 * sig_t0/(sig_t1 + sig_t0)+(1-s_t1.float())*sig_t0*10000
         c_smooth[t-1] = s_t1.float()*(c_t1 * sig_t0 + c_t0 * sig_t1)/(sig_t1 + sig_t0)+(1-s_t1.float())*c_t0
 
-    #     if c_smooth[t-1].isnan().sum():
-    #         print("C SMOOTHIN NAN", c_smooth[t-1], s_t1, s_t0, sig_t1, sig_t0)
-    #         break
     return c_smooth, s_smooth
+
+
 
 def impute_c_dynamics(c_filt, basis, impute_val, thresh=1e-2):
     c_mod = torch.zeros_like(c_filt)
@@ -228,93 +220,6 @@ from numba import jit
 import numba
 import numpy as np
 
-
-# from numba import jit
-
-# @jit(nopython=True)
-# def fastSBLDFInference(x_sample, xdot, G, xi = 10, max_iter = 1000, tol = 10e-5, ab_init = 0):
-
-#     '''
-#     via SBL-DF
-#     '''
-   
-#     T = len(xdot)
-#     D, N, _ = G.shape
-#     M = N
-    
-# #     print(T)
-    
-#     # init SBL parameters
-#     a = np.ones(D)*ab_init
-#     b = np.ones(D)*ab_init
-
-#     # SBL through time
-#     g_i = np.ones(D,)*10 # gamma
-
-#     a_ = []
-#     b_ = []
-#     l_i = 1
-#     c_filt = []
-#     gammas = []
-#     lambdas = []
-#     sigmas = []
-#     for t in range(T):
-#         a_.append(a)
-#         b_.append(b)
-
-        
-#         l_i = 0.1
-# #         # Inner SBL Loop per time point
-#         mu = np.ones((D))*10e8
-#         Sigma = np.ones((D,D))*10e8
-        
-
-#         A_ = np.zeros((D, N))
-#         for d in range(D):
-#             A_[d] = G[d] @ x_sample[t]
-#         Phi = A_.T 
-
-# #         # INFER MU and SIGMA on q(c_t)
-#         for i in range(max_iter): # while has not converged
-#             old_m = np.ascontiguousarray(mu)
-#             old_S = np.ascontiguousarray(Sigma)
-
-#              # compute source posterior
-#             Sigma = np.ascontiguousarray(np.linalg.inv(np.diag(1/g_i) + 1/l_i * Phi.T @ Phi))
-#             mu = np.ascontiguousarray(1/l_i * (Sigma @ Phi.T) @ xdot[t])
-
-#              # HP updates
-#             g_i = ((np.diag(Sigma) + mu**2) + 2*b)/(1+2*a)
-#             l_i = (((xdot[t] - Phi @ mu)**2).sum() + np.trace(Phi.T @ Phi @ Sigma))/M
-            
-#              # check convergence
-#             change = np.linalg.norm(old_S - Sigma) + np.linalg.norm(old_m - mu)
-#             if change < tol:
-#                 break
-
-      
-        
-
-#         if t < T-1:
-#             if (mu**2).sum() < 1e-1: # reset gammas if mu goes to 0. 
-#                 b = np.ones(D)*ab_init
-#                 a = np.ones(D)*ab_init
-#                 g_i = np.ones(D)*1
-#                 mu = c_filt[-1]
-#                 Sigma = sigmas[-1]
-            
-                
-#             else:
-#                 b = np.ones(D)*xi*((mu + 1e-1) ** 2)
-#                 a = np.ones(D)*xi
-#                 g_i = b / a
-
-#         c_filt.append(mu)
-#         gammas.append(g_i)
-#         lambdas.append(l_i)
-#         sigmas.append(Sigma)
-    
-#     return c_filt, gammas, lambdas, a, b, sigmas
 
 
 from numba import jit
@@ -428,5 +333,35 @@ def convertfastSBL(fastOutput):
     
     return c_filt, gammas, lambdas, a, b, sigmas
     
+
+def sparseSmoother_opt(model, c_filt, sigmas, basis, latent):
+    x0, x1 = latent[:-1], latent[1:]
+    dx = x1 - x0
+    Phis = (model.dynamics[None] @ x0[:,None,:,None]).squeeze()
+    b0, b1 = basis.float()[:-1], basis.float()[1:]
+    bs = (b1 - b0).abs().sum(1)
+
+    cs = nn.Parameter(c_filt.clone())
+    c_opt = torch.optim.Adam([cs], lr=1e-2)
+
+    bb2 = torch.roll(bs == 0, -1)
+    bb1 = torch.roll(bs == 0, 1)
+    bb0 = bs == 0
+
+    bbs = bb1*bb0*bb2
+    for i in range(100):
+        c_opt.zero_grad()
+        cs_ = cs*basis
+
+        dx_pred = (Phis.transpose(1,2).data @ cs_[:,:,None]).squeeze()
+        loss = ((dx - dx_pred)**2).sum() + ((cs_[1:] - cs_[:-1])[bbs]**2).sum() + ((cs_[1:] - cs_[:-1])[bbs].abs()).sum()
+        loss.backward()
+        c_opt.step()
+    # + (cs.abs()).sum() + ((cs[1:] - cs[:-1]).abs()).sum()
+
+#         print(loss.item())
+    c_smooth = cs.data
+    s_smooth = torch.zeros_like(c_smooth)
+    return c_smooth, s_smooth
 
 

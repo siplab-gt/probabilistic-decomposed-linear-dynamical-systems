@@ -1,1 +1,1 @@
-import pdLDS
+from pdLDS import pdLDS

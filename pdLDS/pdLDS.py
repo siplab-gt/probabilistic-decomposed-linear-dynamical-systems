@@ -3,12 +3,12 @@ from tqdm.auto import trange
 from offset import LoessInference
 from dynamics import kalman_filter, rts_smoother, backward_sample, sma
 from cDynamics import SBLDFInference, fastSBLDFInference, convertfastSBL
-from cDynamics import smooth_support_channelwise, smooth_support_acrosschannels, group_consecutive_ixs, solve_segmented_restricted_lstsq, sparseSmoother4, impute_c_dynamics
+from cDynamics import smooth_support_channelwise, smooth_support_acrosschannels, group_consecutive_ixs, solve_segmented_restricted_lstsq, sparseSmoother_opt, impute_c_dynamics
 import numpy as np
 from likelihood import obs_ll, dyn_ll
 
 
-from optimizers import AdaBelief
+# from optimizers import AdaBelief
 # from adabelief_pytorch import AdaBeliefe
 
 import torch
@@ -89,12 +89,17 @@ class pdLDS:
             self.S0 = torch.eye(self.N).float()
             
     def _init_opt(self,):
-        self.opt = AdaBelief([self.dynamics], 
-                             lr=self.dynamics_lr, 
-                             eps=1e-8,
-                             rectify = False, 
-                             print_change_log = False, 
-                             weight_decay=self.weight_decay)
+        # self.opt = AdaBelief([self.dynamics], 
+        #                      lr=self.dynamics_lr, 
+        #                      eps=1e-8,
+        #                      rectify = False, 
+        #                      print_change_log = False, 
+        #                      weight_decay=self.weight_decay)
+        
+        self.opt = torch.optim.Adam([self.dynamics], 
+                                     lr=self.dynamics_lr, 
+                                     eps=1e-8,
+                                     weight_decay=self.weight_decay)
         
         # self.opt_C = AdaBelief([self.emissions], 
         #                        lr=self.emissions_lr, 
@@ -193,7 +198,7 @@ class pdLDS:
 
             impute_val = solve_segmented_restricted_lstsq(basis, xdot, self.dynamics, x_smooth)
             c_mod = impute_c_dynamics(c_filt, basis, impute_val)
-            c_smooth, s_smooth = sparseSmoother4(c_mod, sigmas, basis)
+            c_smooth, s_smooth = sparseSmoother_opt(self,c_mod, sigmas, basis, x_smooth)
 #         c_smooth, s_smooth = sparseSmoother3(c_smooth, s_smooth)
         else:
             if self.init:
