@@ -7,7 +7,6 @@ pdLDS/dynamics.py
 pdLDS/generate.py
 pdLDS/likelihood.py
 pdLDS/offset.py
-pdLDS/optimizers.py
 pdLDS/pdLDS.py
 pdLDS/utils.py
 pdLDS.egg-info/PKG-INFO
