@@ -2,23 +2,15 @@ from tqdm.auto import trange
 
 from offset import LoessInference
 from dynamics import kalman_filter, rts_smoother, backward_sample, sma
-from cDynamics import SBLDFInference, fastSBLDFInference, convertfastSBL
-from cDynamics import smooth_support_channelwise, smooth_support_acrosschannels, group_consecutive_ixs, solve_segmented_restricted_lstsq, sparseSmoother_opt, impute_c_dynamics
+from cDynamics import SBLDFInference, fastSBLDFInference, convertfastSBL, sparseSmoother_opt
 import numpy as np
 from likelihood import obs_ll, dyn_ll
-
-
-# from optimizers import AdaBelief
-# from adabelief_pytorch import AdaBeliefe
 
 import torch
 import torch.nn as nn
 from torch.optim.optimizer import Optimizer
 from typing import Tuple, Optional, Callable
 
-import torch
-import torch.nn as nn
-from torch.optim.optimizer import Optimizer
 
 def ensure_torch_tensor_decorator(f):
     def inner(self, Y, *args, **kwargs):
@@ -62,10 +54,7 @@ class pdLDS:
         
         
         self.seed = seed
-        # self.min_var = 1e-3
 
-        # self.initiated = False
-        
         
     def _init_param(self,y):
         # self.initiated = True
@@ -89,24 +78,12 @@ class pdLDS:
             self.S0 = torch.eye(self.N).float()
             
     def _init_opt(self,):
-        # self.opt = AdaBelief([self.dynamics], 
-        #                      lr=self.dynamics_lr, 
-        #                      eps=1e-8,
-        #                      rectify = False, 
-        #                      print_change_log = False, 
-        #                      weight_decay=self.weight_decay)
-        
+
         self.opt = torch.optim.Adam([self.dynamics], 
                                      lr=self.dynamics_lr, 
                                      eps=1e-8,
                                      weight_decay=self.weight_decay)
         
-        # self.opt_C = AdaBelief([self.emissions], 
-        #                        lr=self.emissions_lr, 
-        #                        rectify = False,
-        #                         eps=1e-8, 
-        #                         print_change_log = False)
-
 
         self.lr_ = self.dynamics_lr
         self.sched_dynamics = torch.optim.lr_scheduler.ExponentialLR(self.opt, gamma=0.985)
@@ -114,8 +91,6 @@ class pdLDS:
 
         
     def _infer_offset(self, x, best=None):
-        # debugging code
-        # best_s = self.S
                 
         trend, lds = self.loess.loess_detrend(x, self.S)
         trend, lds = trend.float(), lds.float()
@@ -123,12 +98,6 @@ class pdLDS:
         self.lds = lds
         self.trend = trend
         
-        
-        # experimental              
-#         self.mid = mid = (lds.max(0)[0] + lds.min(0)[0])/2
-        
-#         trend += mid
-#         lds -= mid
         
         y_trend = (self.emissions @ trend.T).T
         y_lds = (self.emissions @ lds.T).T
@@ -141,14 +110,10 @@ class pdLDS:
                       F, 
                       lds0, 
                       ix):
-        # self.Sx.data = torch.clamp(self.Sx.data, np.log(self.min_var))
-        # self.Sy.data = torch.clamp(self.Sy.data, np.log(self.min_var))
         
         x_filt, x_pred, p_filt, p_pred, KT = kalman_filter(y_lds, F, self.emissions, lds0, torch.diag(self.Sy), torch.diag(self.Sx), self.S0)
         x_smooth, p_smooth, p2_smooth = rts_smoother(x_filt, x_pred, p_filt, p_pred, F, KT, self.emissions)
         
-        
-        # xs = backward_sample(x_filt, x_pred, p_filt, p_pred, F)
         xs = x_smooth
         
         x_sm = sma(x_smooth, 3)
@@ -188,9 +153,7 @@ class pdLDS:
         self.gammas = gammas
         self.sigmas = sigmas
         if self.smooth_c:
-            # c_smooth, s_smooth = sparseSmoother(c_filt, sigmas, x_smooth,xdot, self.dynamics)
-            # c_filt = self.initial_smooth(c_filt, x_smooth, xdot)
-            # c_smooth, _ = sparseSmoother3(c_filt, sigmas)
+
             w = 4
             support = (c_filt.abs() > 1e-4)
             ss = smooth_support_channelwise(support, w)
@@ -199,19 +162,12 @@ class pdLDS:
             impute_val = solve_segmented_restricted_lstsq(basis, xdot, self.dynamics, x_smooth)
             c_mod = impute_c_dynamics(c_filt, basis, impute_val)
             c_smooth, s_smooth = sparseSmoother_opt(self,c_mod, sigmas, basis, x_smooth)
-#         c_smooth, s_smooth = sparseSmoother3(c_smooth, s_smooth)
+
         else:
             if self.init:
                 c_smooth = self.initial_smooth(c_filt, x_smooth, xdot, self.init_smoothness)
             else:
-                # c_filt = pdlds.coefs_filt[ix]
-                # latent = pdlds.latent[ix]
-                # xdot = latent[1:] - x_s[:-1]
-                # xdot
-                # x_smooth
-                # sigmas = self.sigmas
-
-               
+                
                 c_smooth = c_filt
             
         c_smooth[np.abs(c_smooth) < 1e-4] = 0 # machine precision sparsity
@@ -219,6 +175,7 @@ class pdLDS:
         
         
         return c_smooth, c_filt
+
 
 
 
@@ -295,14 +252,7 @@ class pdLDS:
             Y, 
             S, 
             epochs
-            # dynamics_lr=1, 
-            # emissions_lr=1,
-            # weight_decay=1, 
-            # num_iters=100,
-            # xi = 0.1,
-            # # s_bounds = (0.9, 0.9),
-            # init = True, 
-            # smooth_c=True,
+            
            ):
 
         '''
@@ -314,6 +264,21 @@ class pdLDS:
         emissions_lr: [0,1] float. learning rate
         '''
 
+
+        # assert S > 1, "Offset Window Size must be > 1"
+        # self.S = S
+
+        # if not init:
+        #     assert self.dynamics is not None, "Dynamics is not initialized"
+
+
+
+        # Y = ensure_input_torch_tensor(Y)
+
+
+
+        
+     
         
         y = Y[0]
         
@@ -340,17 +305,16 @@ class pdLDS:
             for ix in pbar_inner:
 
 
-                with torch.no_grad():
-                    y = Y[ix].float()
-                    xs, xdot, trend, p_smooth, p2_smooth = self._infer(y, 
-                                                    self.latent, 
-                                                    self.coefs, 
-                                                    self.coefs_filt, 
-                                                    self.offsets, 
-                                                    ix)
+                y = Y[ix].float()
+                xs, xdot, trend, p_smooth, p2_smooth = self._infer(y, 
+                                                self.latent, 
+                                                self.coefs, 
+                                                self.coefs_filt, 
+                                                self.offsets, 
+                                                ix)
 
-                    self.p_smooth = p_smooth
-                    self.p2_smooth = p2_smooth
+                self.p_smooth = p_smooth
+                self.p2_smooth = p2_smooth
 
                     
 
@@ -387,7 +351,6 @@ class pdLDS:
             # self.emissions.data = self.emissions.data/self.emissions.data.norm(dim=0)
 
             self.sched_dynamics.step()
-            # self.sched_dynamics_emissions.step()
             ratio_c = np.sum([(c.abs().sum(1) < 1e-2).sum() for c in self.coefs])/np.sum([len(c) for c in self.coefs])
 
 
@@ -398,12 +361,10 @@ class pdLDS:
 
             with torch.no_grad():
                 self.S0 = p_smooth[0]
-
-            
                 self.update_dynamics_err()
 
-
             i += 1
+#             self.train_ix += 1
             pbar_outer.update(1)
 
             
@@ -427,11 +388,11 @@ class pdLDS:
 
             # print(latent[ix])
             
-            c_smooth, c_filt = self._infer_coef(x_smooth, xdot)
+        c_smooth, c_filt = self._infer_coef(x_smooth, xdot)
             
         
-            coefs[ix] = c_smooth
-            coefs_filt[ix] = c_filt
+        coefs[ix] = c_smooth
+        coefs_filt[ix] = c_filt
             
             
         return xs, xdot, trend, p_smooth, p2_smooth
@@ -511,6 +472,10 @@ class pdLDS:
 
         Sx /= weight
 
+        # F = self._get_transitions(self.coefs[-1])
+
+        # Sx = torch.maximum(torch.diag((self.p_smooth[1:] - (F @ self.p2_smooth)).mean(0)), torch.tensor(1e-3)
+
         Sx = torch.maximum(Sx, torch.tensor(1e-3))
         # print("Sx", Sx)
         self.Sx = Sx.float()
@@ -523,6 +488,108 @@ class pdLDS:
         return c_infer
 
         
+
+
+
+
+
+
+
+def smooth_support_channelwise(support, w):
+    support_smooth = torch.zeros_like(support)
+    for i in range(len(support)-w):
+        support_smooth[i+w//2] = torch.round(support[i:i+w+1].float().mean(0))
+
+    for i in range(w//2):
+        support_smooth[i] = support[i]
+        support_smooth[-i] = support[-i]
+
+    return support_smooth
+
+def smooth_support_acrosschannels(support, w, rate_threshold=0.05 ):
+    rates = torch.zeros(len(support))
+    for i in range(len(support)-w):
+        b_ = support[i:i+w+1]
+        rate = (b_.float()[1:] - b_.float()[:-1] != 0).sum(1).float().mean()
+        rates[i+w//2] = rate
+
+
+    support_smooth = torch.clone(support)
+    for i in torch.where(rates > rate_threshold)[0]:
+        support_smooth[i] = support_smooth[i - 1]
+
+    for i in range(len(support_smooth)-3):
+        l = support_smooth[i:i+3].float().mean(0)
+        support_smooth[i+1] = torch.round(l)
+    support_smooth[0] = support_smooth[1]
+    support_smooth[-2] = support_smooth[-1]
+    return support_smooth
+
+def group_consecutive_ixs(x):
+    ixs_ = torch.where((x.float()[1:]-x.float()[:-1]).abs().sum(1) != 0)[0]
+    ixs = torch.zeros(len(ixs_)+2)
+    ixs[1:-1] = ixs_
+    ixs[-1] = len(x)-1
+    return ixs
+
+def solve_segmented_restricted_lstsq(basis, y, dynamics, x):
+
+    ixs = group_consecutive_ixs(basis)
+
+    values = []
+    for k, (i,j) in enumerate(zip(ixs[:-1], ixs[1:])):
+        
+        ix1 = i.int()
+        ix2 = j.int()
+        if ix2 - ix1 == 1: # TODO: avoid extremely short sequences
+            ix2 = np.min([j.int().item() +1, len(basis)-1])
+            if ix2 == len(basis)-1:
+                ix1 = i.int() - 2
+
+        n_basis = basis[ix2].sum().item()
+        obs = y[ix1:ix2] 
+        dos = dynamics[basis[ix2]].data
+        if n_basis == 1:
+
+                phis = (dos @ x[ix1:ix2][:,:,None]).squeeze()
+                phis_ = phis.flatten()
+                obs_ = obs.flatten()
+                c_ = torch.linalg.lstsq( phis_[:,None], obs_[:,None])[0].flatten()
+    
+        else:
+            
+            phis = (dos[None,:] @ x[ix1:ix2][:,None,:, None]).squeeze()
+            phis = phis.transpose(1,2)
+            phis_ = phis.reshape(phis.shape[0]*phis.shape[1],n_basis)
+            obs_ = obs.flatten()[:,None]
+            c_ = torch.linalg.lstsq(phis_, obs_)[0].flatten()
+
+        values.append([ix1.item(), ix2.item(), c_, basis[ix2]])
+
+    c_infer = torch.zeros_like(basis.float())
+
+    for (ix1, ix2, value, bs) in values:
+        temp = torch.zeros_like(c_infer[ix1:ix2])
+        temp[:,bs] = temp[:,bs]+value
+        c_infer[ix1:ix2] = temp
+
+
+    c_infer[-1] = c_infer[-2]
+    c_infer *= basis
+    return c_infer
+
+
+def impute_c_dynamics(c_filt, basis, impute_val, thresh=1e-2):
+    c_mod = torch.zeros_like(c_filt)
+    c_mod[((c_filt * basis).abs() < thresh)] = impute_val[((c_filt * basis).abs() < thresh)]
+    c_mod[((c_filt * basis).abs()>=  thresh)] = c_filt[((c_filt * basis).abs()>=  thresh)]
+    return c_mod
+
+
+
+
+
+
 
 
 
