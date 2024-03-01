@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: pdLDS
-Version: 0.13
+Version: 0.14
 Summary: Probabilistic Decomposed Linear Dynamical Systems
 Author: Yenho Chen
 Author-email: <yenho@gatech.edu>
@@ -18,4 +18,4 @@ Requires-Dist: numba
 Requires-Dist: torch
 Requires-Dist: scipy
 
-A package that allows to build simple streams of video, audio and camera data.
+Probabilistic Inference for Decomposed Linear Dynamical Systems (dLDS) model
