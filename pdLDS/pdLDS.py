@@ -5,6 +5,11 @@ from .dynamics import kalman_filter, rts_smoother, backward_sample, sma
 from .cDynamics import SBLDFInference, fastSBLDFInference, convertfastSBL, sparseSmoother_opt
 from .likelihood import obs_ll, dyn_ll
 
+# from offset import LoessInference
+# from dynamics import kalman_filter, rts_smoother, backward_sample, sma
+# from cDynamics import SBLDFInference, fastSBLDFInference, convertfastSBL, sparseSmoother_opt
+# from likelihood import obs_ll, dyn_ll
+
 import numpy as np
 
 import torch
@@ -52,6 +57,7 @@ class pdLDS:
         self.K = n_dynamic_operators
 
         self.dynamics = None
+        self.emissions = None
         
         
         self.seed = seed
@@ -92,8 +98,10 @@ class pdLDS:
 
         
     def _infer_offset(self, x, best=None):
+
+        S_ = min(len(x), self.S)
                 
-        trend, lds = self.loess.loess_detrend(x, self.S)
+        trend, lds = self.loess.loess_detrend(x, S_)
         trend, lds = trend.float(), lds.float()
 
         self.lds = lds
@@ -141,8 +149,8 @@ class pdLDS:
         
     
     def _infer_coef(self, x_smooth, xdot):
-        fastOutput = fastSBLDFInference(x_smooth.numpy().astype(np.float64),
-                                        xdot.numpy().astype(np.float64),
+        fastOutput = fastSBLDFInference(np.ascontiguousarray(x_smooth.numpy().astype(np.float64)),
+                                        np.ascontiguousarray(xdot.numpy().astype(np.float64)),
                                         self.dynamics.data.numpy().astype(np.float64), 
                                         xi=self.xi, 
                                         max_iter=200, 
@@ -215,7 +223,7 @@ class pdLDS:
         
         if init:
             print(f"Initializing weights with {init_iters} iterations")
-            self.loss_curve = []
+            self.log_pdf_curve = []
             self.lrs = []
             self.offsets = [torch.zeros([i.shape[0], self.N]) for i in Y] 
             self.latent = [torch.zeros([i.shape[0], self.N]) for i in Y] 
@@ -284,7 +292,7 @@ class pdLDS:
         y = Y[0]
         
         
-        pbar_outer = trange(epochs, desc="ELBO: --", position=0)
+        pbar_outer = trange(epochs, desc="log pdf: --", position=0)
         
         
         i = 0
@@ -296,7 +304,7 @@ class pdLDS:
             # self.loess = LoessInference(self.s_bounds, T=len(x), x=x, best=None)
             self.loess = LoessInference( T=len(x), x=x, best=None)
 
-            pbar_inner = trange(self.n_samples, desc="ELBO (-): --", position=1, leave=False)
+            pbar_inner = trange(self.n_samples, desc="log pdf (-): --", position=1, leave=False)
 
 
             # self.opt_C.zero_grad()
@@ -323,7 +331,7 @@ class pdLDS:
                     F = self._get_transitions(self.coefs[ix])
 
 
-                    # compute ll    
+                    
                     nll = 0
                     nll += -dyn_ll(xs[:-1],xs[1:], F, torch.diag(self.Sx))/(self.coefs[ix].shape[0])
                     nll += -obs_ll(y[1:], (F @ xs[:-1][:,:,None]).squeeze()+ trend[:-1], self.emissions, torch.diag(self.Sy))/(self.coefs[ix].shape[0])
@@ -334,8 +342,8 @@ class pdLDS:
 
                     nll.backward()
 
-                    loss += nll
-                    pbar_inner.set_description(f"ELBO ({ix}): {nll:.4f}\t")
+                    loss -= nll
+                    pbar_inner.set_description(f"log pdf ({ix}): {-nll:.4f}\t")
                     
             
             # print("DYNAMICS GRAD", self.dynamics.grad)
@@ -357,8 +365,8 @@ class pdLDS:
 
 
             pbar_inner.close()
-            self.loss_curve.append(loss.item())
-            pbar_outer.set_description(f"ELBO: {loss.item():.4f} c:{ratio_c:.4f}")
+            self.log_pdf_curve.append(loss.item())
+            pbar_outer.set_description(f"log pdf: {loss.item():.4f} c:{ratio_c:.4f}")
 
             with torch.no_grad():
                 self.S0 = p_smooth[0]
@@ -405,7 +413,7 @@ class pdLDS:
         y: (list of T x M np.arrays)
         '''
 
-        assert hasattr(self, 'f') and hasattr(self, 'C'), "parameters are not fit"
+        assert self.dynamics is not None and self.emissions is not None, "Parameters are None. Need to call fit or set dynamics and emissions atributes."
 
         offsets = [torch.zeros([i.shape[0], self.N]) for i in Y] 
         latent = [torch.zeros([i.shape[0], self.N]) for i in Y] 
