@@ -1,5 +1,0 @@
-tqdm
-numpy
-numba
-torch
-scipy
